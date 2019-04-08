@@ -14,11 +14,33 @@
             <li><input type="number"></li>
             <li><input type="number"></li>
             <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
         </ol>
 
         <h2>Right Insole <input type="radio" data-is-left=false onclick="radioButtonOnInput(this)"></h2>
         <h3>Sensors</h3>
         <ol class="insoleSensorsList" data-is-left=false>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
+            <li><input type="number"></li>
             <li><input type="number"></li>
             <li><input type="number"></li>
             <li><input type="number"></li>
@@ -33,9 +55,10 @@
                 const insoleSensorsList = insoleSensorsLists.find(insoleSensorsList => insoleSensorsList.dataset.isLeft == insole.isLeft.toString());
                 const insoleSensorsListItems = Array.from(insoleSensorsList.children);
                 insoleSensorsListItems.forEach((insoleSensorsListItem, sensorIndex) => {
+                    const input = Array.from(insoleSensorsListItem.getElementsByTagName("input"))[0];
                     const sensor = insole.sensors[sensorIndex];
                     if(sensor)
-                        insoleSensorsListItem.innerText = sensor.value.toFixed(2);
+                        input.value = sensor.value.toFixed(2);
                 })
             })
 

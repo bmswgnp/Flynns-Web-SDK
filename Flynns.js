@@ -98,9 +98,7 @@ Flynns.Insole = class Insole {
     }
 
     get serviceUUID() {
-        return this.isLeft?
-            "4fafc201-1fb5-459e-8fcc-c5c9c331914b" :
-            "7a658cba-0dcd-4d02-bb97-80296cf72dfd" ;
+        return "7a658cba-0dcd-4d02-bb97-80296cf72dfd";
     }
 
     get characteristicUUID() {
@@ -175,16 +173,19 @@ Flynns.Sensors = class Sensors extends Array {
         this.isLeft = isLeft;
     }
 
-    // use offset in decoder.decode(dataView.buffer) for future byte parsing
     static parse(isLeft, dataView, offset = 0) {
-        const decoder = new TextDecoder("utf-8");
-        const sensorValuesString = decoder.decode(dataView.buffer);
-        const sensorValueStrings = sensorValuesString.split(',');
-        const sensorValues = sensorValueStrings.map(sensorValueString => Number(sensorValueString));
-        const sensors = sensorValues.map((sensorValue, sensorIndex) => new Flynns.Sensor(sensorValue, isLeft, sensorIndex));
-        
+        const sensors = [];
+        for(let index = 0; index < dataView.byteLength; index++) {
+            const rawValue = dataView.getUint8(offset + index);
+
+            const value = rawValue/255;
+
+            const sensor = new Flynns.Sensor(value, isLeft, index);
+            sensors[index] = sensor;
+        }
+
         const timestamp = Date.now();
-        
+
         return new this(sensors, timestamp, isLeft);
     }
 }
