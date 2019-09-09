@@ -9,14 +9,13 @@
             margin: 0;
             height: 100%;
         }
-
         .sensor {
             position : absolute;
         }
     </style>
 
     <body>
-        <img src="images/mission.png" height="100%"></image>
+        <img src="images/mission.png" height="100%">
     </body>
 
     <script>
@@ -27,7 +26,6 @@
         window.addEventListener("resize", event => {
             image.width = image.height * ratio;
             scale = image.clientWidth/image.naturalWidth;
-
             sensors.forEach(sensor => resizeSensor(sensor));
         });
     </script>
@@ -48,13 +46,10 @@
         const resizeSensor = sensor => {
             const x = Number(sensor.dataset.x);
             const y = Number(sensor.dataset.y);
-
             sensor.style.left = x*image.clientWidth;
             sensor.style.top = y*image.clientHeight;
-
             sensor.style.width = sensor.style.height = scale*65;
         }
-
         addSensor(0.37, 0.69);
         addSensor(0.37, 0.851);
         addSensor(0.365, 0.782);
@@ -71,7 +66,6 @@
         addSensor(0.48, 0.852);
         addSensor(0.481, 0.783);
         addSensor(0.484, 0.69);
-
     </script>
 
     <script>
@@ -80,7 +74,6 @@
             const json = JSON.parse(message);
             json.values.forEach((value, index) => {
                 if(index == 3) return;
-
                 sensors[index].style.backgroundColor = `rgba(0, 255, 0, ${value/100})`;
             });
         });

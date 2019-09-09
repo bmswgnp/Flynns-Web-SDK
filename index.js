@@ -22,7 +22,7 @@ io.on("connection", socket => {
     console.log("connected");
 });
 
-const Missions = require("./Missions.js");
+const Missions = require("./node_module/Missions.js");
 const missions = new Missions(message => {
     io.emit("message", message);
     console.log(JSON.parse(message))
