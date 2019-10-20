@@ -1,112 +1,523 @@
 <html>
     <head>
-        <script src="./script/Missions.js"></script>
+        <link rel="shortcut icon" href="./images/icon.png"/>
+        <title>Mission Control</title>
+        <meta name="viewport" content="width=device-width">
+
+        <script src="./script/missions/ViewerElement.js" type="module"></script>
+        <script src="./script/missions/Missions.js" type="module"></script>
     </head>
 
-    <style id="myStyle">
+    <style>
         html, body {
             margin: 0;
             height: 100%;
         }
-        .sensor {
-            position : absolute;
+
+        #container {
+            display: grid;
+            grid-template-rows: 5fr 1fr 50px;
+            width: 100%;
+            height: 100%;
+        }
+
+        #viewer {
+            grid-column: 1 / span 2;
+            grid-row: 1;
+        }
+
+
+        #tabs {
+            grid-row: 2;
+            grid-column: 1 / span 2;
+        }
+
+        #tabs > [data-tab] {
+            display: none;
+        }
+        #tabs > [data-tab][data-selected] {
+            display: block;
+        }
+        #tabs > [data-tab="recordings"] {
+            overflow: scroll;
+            height: 180px;
+        }
+
+
+        #container > button[data-tab]  {
+            grid-row: 3;
         }
     </style>
 
-    <body>
-        <img src="./images/mission.png" height="100%">
-    </body>
+    <script>     
+        var missions;
 
-    <script>
-        const demoMode = "center";
+        // monitor, playback
+        var mode = "monitor";
 
-        // Visual Stuff
-        const style = document.getElementsByTagName("style")[0]
-        const image = document.getElementsByTagName("img")[0];
-        const ratio = image.naturalWidth/image.naturalHeight;
-        var scale = image.clientWidth/image.naturalWidth;
-        window.addEventListener("resize", event => {
-            image.width = image.height * ratio;
-            scale = image.clientWidth/image.clientHeight;
-            sensors.forEach(sensor => resizeSensor(sensor));
+        window.addEventListener("load", event => {
+            missions = new window.Missions();
+            missions.addEventListener("sensorData", event => {
+                if(mode == "monitor") {
+                    const sensorIndicies = [5, 4, 15, 10, 2, 0];
+                    sensorIndicies.forEach((toIndex, fromIndex) => {
+                        viewer[event.detail.side].values[toIndex] = 100*event.detail.sensorData[fromIndex]/255;
+                    });
+                }
+            });
         });
 
-        const sensors = [];
-        const sensorStyle = style.sheet.cssRules[1];
-        const addSensor = (x, y) => {
-            const sensor = document.createElement("div");
-            sensor.className = "sensor";
-            sensor.dataset.index = sensors.length;
-            sensor.dataset.x = x;
-            sensor.dataset.y = y;
-            document.body.appendChild(sensor);
-            sensors.push(sensor);
-            resizeSensor(sensor);
-        }
-        const resizeSensor = sensor => {
-            const x = Number(sensor.dataset.x);
-            const y = Number(sensor.dataset.y);
-            sensor.style.left = x*image.clientWidth;
-            sensor.style.top = y*image.clientHeight;
-            sensor.style.width = sensor.style.height = scale*65;
-        }
-
-        const missions = new Missions();
-        window.addEventListener("click", event => {
-            if(missions.serialPort == undefined)
-                missions.open();
-        })
-        missions.callback = json => {
-            const {type, values} = json;
-            console.log(values);
-
-            if(type == "fsr") {
-                // highlight sensor cells
-                values.forEach((value, index) => {
-                    if(!missions.ignoredPositions.includes(index))
-                        sensors[index].style.backgroundColor = `rgba(0, 255, 0, ${value/100})`;
-                });
-                        
-                // get center
-                const averagePosition = {x:0, y:0};
-                var sum = 0;
-                const numberofValidSensors = missions.sensorPositions.length - missions.ignoredPositions.length;
-                
-                values.forEach((value, index) => {
-                    if(!missions.ignoredPositions.includes(index)) {
-                        sum += value/100;
-                    }
-                });
-                values.forEach((value, index) => {
-                    if(!missions.ignoredPositions.includes(index)) {
-                        const position = missions.sensorPositions[index];
-                        const weight = (value/100) / sum;
-                        averagePosition.x += position.x * weight;
-                        averagePosition.y += position.y * weight;
-                    }
-                });
-                centerSensor.dataset.x = averagePosition.x;
-                centerSensor.dataset.y = averagePosition.y;
-                resizeSensor(centerSensor);
-                centerSensor.style.backgroundColor = `rgba(255, 0, 0, ${Math.min(5*sum/numberofValidSensors, 1)})`;
-            }
-        }
-
-        missions.sensorPositions.forEach(sensorPosition => {
-            const {x, y} = sensorPosition;
-            addSensor(x, y);
+        window.addEventListener("unload", event => {
+            ["left", "right"].forEach(side => {
+                if(missions.isConnected(side)) {
+                    missions.disconnect(side);
+                }
+            });
         });
 
-        addSensor(0, 0);
-        const centerSensor = sensors[sensors.length-1];
-        centerSensor.style.backgroundColor = `rgba(0, 0, 255, 1)`;
-
-
-        window.missions = missions;
-        window.Missions = Missions;
-
-        window.addEventListener("close", event => {
-            missions.disconnect();
-        });
     </script>
+
+    <body>
+        <div id="container">
+            <ukaton-missions-viewer id="viewer"></ukaton-missions-viewer>
+
+            <script>
+                {
+                    document.querySelectorAll(`button[data-tab]`).forEach(button => {
+                        button.addEventListener("click", event => {
+                            document.querySelectorAll(`div[data-tab][data-selected]`).forEach(selectedDiv => delete selectedDiv.dataset.selected)
+                            
+                            const selectedDiv = document.querySelector(`div[data-tab="${button.dataset.tab}"]`);
+                            selectedDiv.dataset.selected = '';
+                        });
+                    });
+        
+                    window.addEventListener("load", event => {
+                        const viewer =  document.querySelector(`ukaton-missions-viewer`);
+                        viewer.start();
+                        window.viewer = viewer;
+        
+                        ["left", "right"].forEach(side => {
+                            viewer[side].style.opacity = "0.5";
+                            viewer[side].addEventListener("click", event => {
+                                if(!missions.isConnected(side)) {
+                                    missions.connect(side)
+                                        .then(() => {
+                                            viewer[side].style.opacity = "1";
+                                            missions.start(side);
+                                        });
+                                }
+                            });
+                        });
+                    });
+                }
+            </script>
+
+
+            <div id="tabs">
+                <div data-tab="record" data-selected>
+                    <form>
+                        <label name="type">
+                            Type: 
+                            <select>
+                                <option value="walking" selected>walking</option>
+                                <option value="custom">custom</option>
+                            </select>
+                            <input hidden type="text">
+                        </label>
+                        <br>
+
+                        <label name="rate">
+                            Rate:
+                            <select>
+                                <option value="20" selected>20</option>
+                                <option value="40">40</option>
+                                <option value="80">80</option>
+                                <option value="custom">custom</option>
+                            </select>
+
+                            <input hidden type="number" min="1" max="256">
+                        </label>
+                        <br>
+
+                        <label name="side">
+                            Side(s): 
+                            <select>
+                                <option value="both">both</option>
+                                <option value="left">left</option>
+                                <option value="right">right</option>
+                            </select>
+                        </label>
+                        <br>
+
+                        <button disabled name="record">Record</button>
+                        <button name="stop" hidden>Stop</button>
+                    </form>
+
+                    <script>
+                        {
+                            const tab = document.querySelector(`div[data-tab="record"]`);
+                            const selects = {};
+                            ["type", "rate", "side"].forEach(name => {
+                                selects[name] = tab.querySelector(`[name="${name}"]>select`);
+                            });
+
+                            const recordings = Object.keys(localStorage).filter(key => !isNaN(key)).map(key => Number(key)).map(index => JSON.parse(localStorage[index]));
+
+                            ["type", "rate"].forEach(name => {
+                                recordings.forEach(recording => {
+                                    var option = selects[name].querySelector(`option[value="${recording[name]}"]`);
+                                    if(option == null) {
+                                        option = document.createElement('option');
+                                        option.value = option.innerText = recording[name];
+                                        selects[name].insertBefore(option, selects[name].querySelector(`option[value="custom"]`));
+                                    }
+                                });
+                                
+                                selects[name].addEventListener("input", event => {
+                                    const input = event.target.parentElement.querySelector(`input`);
+                                    
+                                    if(event.target.value == "custom") {
+                                        input.removeAttribute("hidden");
+                                    }
+                                    else {
+                                        input.setAttribute("hidden", '');
+                                    }
+                                });
+                            });
+
+                            const buttons = {};
+                            ["record", "stop"].forEach(name => {
+                                const button = tab.querySelector(`button[name="${name}"]`);
+                                buttons[name] = button;
+
+                                button.addEventListener("click", event => event.preventDefault());
+                            });
+
+                            const updateSideSelect = () => {
+                                if(!buttons.record.hidden) {
+                                    switch(selects.side.value) {
+                                        case "left":
+                                        case "right":
+                                            buttons.record.disabled = !missions.isConnected(selects.side.value)
+                                            break;
+                                        case "both":
+                                            buttons.record.disabled = !["left", "right"].every(side => missions.isConnected(side))
+                                            break;
+                                        default:
+                                            break;
+                                    }
+                                }
+                            }
+
+                            selects.side.addEventListener("input", event => {
+                                updateSideSelect();
+                            });
+
+                            window.addEventListener("load", event => {
+                                missions.addEventListener("connect", event => {
+                                    updateSideSelect();
+                                });
+                            });
+
+                            buttons.record.disabled = false;
+
+                            var recording;
+
+                            buttons.record.addEventListener("click", event => {
+                                const newColor = {
+                                    r: 255,
+                                    g: 0,
+                                    b: 0,
+                                }
+
+                                switch(selects.side.value) {
+                                    case "left":
+                                    case "right":
+                                        Object.assign(viewer[selects.side.value].color, newColor);
+                                        break;
+                                    case "both":
+                                        ["left", "right"].forEach(side => {
+                                            Object.assign(viewer[side].color, newColor);
+                                        });
+                                        break;
+                                    default:
+                                        break;
+                                }
+
+                                recording = {
+                                    date : Date.now(),
+                                    data : {
+                                        left : [],
+                                        right : [],
+                                    },
+
+                                    side : selects.side.value,
+                                    type : (selects.type.value == "custom")? selects.type.parentElement.querySelector('input').value : selects.type.value,
+                                    rate : (selects.rate.value == "custom")? selects.rate.parentElement.querySelector('input').value : selects.rate.value,
+                                };
+
+                                buttons.record.hidden = true;
+                                buttons.stop.hidden = false;
+                            });
+
+                            window.addEventListener("load", event => {
+                                missions.addEventListener("sensorData", event => {
+                                    if(recording !== undefined) {
+                                        // add a timestamp to the sensor data?
+                                        recording.data[event.detail.side].push(event.detail.sensorData.slice());
+                                    }
+                                });
+                            });
+
+                            buttons.stop.addEventListener("click", event => {
+                                const newColor = {
+                                    r: 0,
+                                    g: 255,
+                                    b: 0,
+                                }
+
+                                switch(selects.side.value) {
+                                    case "left":
+                                    case "right":
+                                        Object.assign(viewer[selects.side.value].color, newColor);
+                                        break;
+                                    case "both":
+                                        ["left", "right"].forEach(side => {
+                                            Object.assign(viewer[side].color, newColor);
+                                        });
+                                        break;
+                                    default:
+                                        break;
+                                }
+
+                                if(recording !== undefined) {
+                                    recording.period = Date.now() - recording.date;
+                                    const index = Object.keys(localStorage).filter(key => !isNaN(key)).map(key => Number(key)).reduce((max, index) => max>index? max:index, 0) + 1;
+                                    localStorage[index] = JSON.stringify(recording);
+                                    renderRecording(index);
+                                    delete recording;
+                                }
+
+                                buttons.record.hidden = false;
+                                buttons.stop.hidden = true;
+                            });
+                        }
+                    </script>
+                </div>
+
+                <ol data-tab="recordings">
+                    <template>
+                        <li data-li>
+                            <ul>
+                                <li>Date: <span data-date></span></li>
+                                <li>Type: <span data-type></span></li>
+                                <li>Length: <span data-length></span> seconds</li>
+                                <li>Rate: <span data-rate></span> milliseconds</li>
+                                <li>Side(s): <span data-side></span></li>
+                                <button disabled data-play>Play</button>
+                                <button hidden data-stop>Stop</button>
+                                <br>
+                                <a data-download>
+                                    <button disabled data-download>Download</button>
+                                </a>
+                            </ul>
+                        </li>
+                    </template>
+
+                    <script>                            
+                        {
+                            const tab = document.querySelector(`[data-tab="recordings"]`);
+                            const template = tab.querySelector(`template`);
+                            const keys = Object.keys(localStorage);
+                            const indices = keys.filter(key => !isNaN(key)).map(key => Number(key)).sort((a, b) => a-b);
+
+                            window.renderRecording = (index) => {
+                                const recording = JSON.parse(localStorage[index]);
+                                const recordingContainer = document.importNode(template.content, true);
+                                
+                                recordingContainer.querySelector(`[data-li]`).value = index;
+                                recordingContainer.querySelector(`span[data-date]`).innerText = new Date(recording.date);
+                                recordingContainer.querySelector(`span[data-type]`).innerText = recording.type;
+                                recordingContainer.querySelector(`span[data-side]`).innerText = recording.side;
+                                recordingContainer.querySelector(`span[data-length]`).innerText = Math.floor(recording.period/1000);
+                                recordingContainer.querySelector(`span[data-rate]`).innerText = recording.rate;
+                                
+                                const csvHeader = ["date", "period", "type", "side"];
+                                switch(recording.side) {
+                                    case "left":
+                                    case "right":
+                                        csvHeader.push(...[0, 1, 2, 3, 4].map(index => `${recording.side}${index}`));
+                                        break;
+                                    case "both":
+                                        ["left", "right"].forEach(side => {
+                                            csvHeader.push(...[0, 1, 2, 3, 4].map(index => `${side}${index}`));
+                                        });
+                                        break;
+                                    default:
+                                        break;
+                                }
+                                var csv = csvHeader.join(',') + `\n`;
+
+                                const populate = (values, index) => {
+                                    csv += csvHeader.map(key => {
+                                        if(index == 0) {
+                                            switch(key) {
+                                                case "date":
+                                                    return new Date(recording.date);
+                                                case "period":
+                                                    return recording.period;
+                                                case "type":
+                                                    return recording.type;
+                                                case "side":
+                                                    return recording.side;
+                                                default:
+                                                    break;
+                                            }
+                                        }
+                                        
+                                        var value;
+                                        ["left", "right"].forEach(side => {
+                                            if(value == undefined && key.includes(side)) {
+                                                var index = Number(key.replace(side, ''));
+                                                if(side == "right")
+                                                    index += values.length/2;
+                                                value = values[index];
+                                            }
+                                        });
+                                        return value;
+
+                                    }).flat().join(',') + `\n`;
+                                }
+
+                                switch(recording.side) {
+                                    case "left":
+                                    case "right":
+                                        recording.data[recording.side].forEach((values, index) => {
+                                            populate(values, index);
+                                        });
+                                        break;
+                                    case "both":
+                                        const minLength = Math.min(recording.data.left.length, recording.data.right.length);
+                                        for(let index = 0; index < minLength; index++) {
+                                            populate([...recording.data.left[index], ...recording.data.right[index]], index);
+                                        }
+                                    default:
+                                        break;
+                                }
+
+                                const downloadButton = recordingContainer.querySelector(`button[data-download]`);
+                                    const downloadLink = recordingContainer.querySelector(`a[data-download]`);
+                                    downloadLink.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+                                    downloadLink.target = "_blank";
+                                    downloadLink.download = `${index}-${recording.side}-${recording.type}-${recording.rate}-${new Date(recording.date)}.csv`;
+                                downloadButton.disabled = false;
+
+                                var intervalId;
+                                
+                                const playButton = recordingContainer.querySelector(`button[data-play]`);
+                                const stopButton = recordingContainer.querySelector(`button[data-stop]`);
+                                playButton.disabled = false;
+                                playButton.addEventListener("click", event => {
+                                    playButton.hidden = true;
+                                    stopButton.hidden = false;
+
+                                    mode = "playback";
+                                    ["left", "right"].forEach(side => Object.assign(viewer[side].color, {r:0, g:0, b:255}));
+
+                                    document.querySelectorAll(`button[data-play]`).forEach(button => {
+                                        if(!button.hidden)
+                                            button.disabled = true;
+                                    });
+
+                                    var index = 0;
+                                    const indexMax = Math.min(...["left", "right"].map(side => recording.data[side].length))-1;
+                                    intervalId = setInterval(() => {
+                                        if(mode !== "playback" || index >= indexMax) {
+                                            stopButtonCallback();
+                                            return;
+                                        }
+
+                                        const sensorIndicies = [5, 4, 15, 10, 2, 0];
+
+                                        switch(recording.side) {
+                                            case "left":
+                                            case "right":
+                                                sensorIndicies.forEach((toIndex, fromIndex) => {
+                                                    const value = 100*recording.data[recording.side][index][fromIndex]/255;
+                                                    viewer[recording.side].values[toIndex] = value;
+                                                });
+                                                break;
+                                            case "both":
+                                                ["left", "right"].forEach(side => {
+                                                    sensorIndicies.forEach((toIndex, fromIndex) => {
+                                                        const value = 100*recording.data[side][index][fromIndex]/255;
+                                                        viewer[side].values[toIndex] = value;
+                                                    });
+                                                });
+                                                break;
+                                            default:
+                                                break;
+                                        }
+
+                                        index++;
+                                    }, recording.rate);
+
+                                });
+
+                                const stopButtonCallback = () => {
+                                    clearInterval(intervalId);
+
+                                    playButton.hidden = false;
+                                    stopButton.hidden = true;
+
+                                    mode = "monitor";
+                                    ["left", "right"].forEach(side => {
+                                        Object.assign(viewer[side].color, {r:0, g:255, b:0});
+                                        viewer[side].values.fill(0);
+                                    });
+
+
+                                    document.querySelectorAll(`button[data-play]`).forEach(button => {
+                                        if(!button.hidden)
+                                            button.disabled = false;
+                                    });
+                                }
+                                stopButton.addEventListener("click", event => {
+                                    stopButtonCallback();
+                                });
+
+                                tab.appendChild(recordingContainer);
+                            }
+
+                            indices.forEach(index => {
+                                renderRecording(index);
+                            });
+                        }
+                    </script>
+                </ol>
+
+            </div>
+
+            <button data-tab="record">Record</button>
+            <button data-tab="recordings">Recordings</button>
+        </div>
+
+        <script>
+            {
+                const container = document.getElementById("container");
+                const tabs = document.getElementById("tabs")
+                
+                const buttons = container.querySelectorAll(`button[data-tab]`);
+
+                buttons.forEach(button => {
+                    button.addEventListener("click", event => {
+                        delete tabs.querySelector(`[data-selected]`).dataset.selected;
+                        tabs.querySelector(`[data-tab="${button.dataset.tab}"]`).dataset.selected = '';
+                    });
+                });
+            }
+        </script>
+
+    </body>
 </html>

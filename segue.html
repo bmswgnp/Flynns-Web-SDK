@@ -1,0 +1,489 @@
+<html>
+    <head>
+        <script src="node_modules/three/build/three.js"></script>
+        <script src="/node_modules/socket.io-client/dist/socket.io.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/resonance-audio/build/resonance-audio.min.js"></script>
+        <script src="/script/segue/bose-ar-web-sdk.min.js"></script>
+        <script src="/script/segue/leap-motion.js"></script>
+        <script src="script/missions/Missions.js" type="module"></script>
+
+        <meta http-equiv="Content-Security-Policy" content="object-src *; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline'">
+
+        <title>Mission Segue</title>
+    </head>
+
+    <style>
+        html, body {
+            height : 100%;
+            margin: 0;
+        }
+    </style>
+
+    <body>
+        <bose-ar-device game-rotation=20 double-tap id=boseARDeviceElement></bose-ar-device>
+        <leap-motion id=leapMotionElement></leap-motion>
+
+        <div style="min-height: 100%" id=htmlElement></div>
+    </body>
+
+    <script>
+        window.addEventListener("load", event => {
+            if(true || window.navigator.platform !== "Win32") {
+                var opened = false;
+                const socket = new io(`http://10.0.0.104:3000`);
+                socket.on("connect", () => {
+                    socket.on("message", message => {
+                        if(leapMotionElement.leapMotion !== undefined) {
+                            leapMotionElement.leapMotion.dispatchEvent(new leapMotionElement.leapMotion.constructor.CustomEvent("message", {
+                                bubbles : false,
+                                detail : message,
+                            }));
+
+                            if(!opened) {
+                                leapMotionElement.leapMotion.dispatchEvent(new leapMotionElement.leapMotion.constructor.CustomEvent("open", {
+                                    bubbles : false,
+                                }));
+                                opened = true;
+                            }
+                        }
+                    });
+                });
+            }
+        })
+    </script>
+
+    <script>
+        const audioContext = new AudioContext();
+        const audioScene = new ResonanceAudio(audioContext, {
+            ambisonicOrder : 3,
+            dimensions : {
+                width: 10, height: 7, depth: 10,
+            },
+            materials : {
+                left: 'uniform', right: 'uniform',
+                front: 'uniform', back: 'uniform',
+                up: 'uniform', down: 'uniform',
+            },
+        });
+        const source = audioScene.createSource();
+
+        const audioElement = document.createElement("audio");
+        
+        audioElement.src = "media/cube-sound.mp3";
+        audioElement.crossOrigin = 'anonymous';
+        audioElement.load();
+        audioElement.loop = true;
+        audioElementSource = audioContext.createMediaElementSource(audioElement);
+        audioElementSource.connect(source.input);
+        audioScene.output.connect(audioContext.destination);
+        audioReady = true;
+
+        function initializeAudio() {
+            audioElement.play();
+        }
+
+        var initializedAudio = false;
+        window.addEventListener("click", event => {
+            if(!initializedAudio) {
+                initializedAudio = true;
+                initializeAudio();
+                if(audioContext.state !== "running") {
+                    audioContext.resume();
+                }
+            }
+        });
+    </script>
+
+    <script>
+        var scene, camera, room, mesh, renderer, cameraLight, ceilingLight;
+        const missionThreshold = {
+            min : 0.3,
+            max : 0.5,
+        };
+        const missionState = {
+            left : '',
+            right : '',
+        }
+        window.addEventListener("keydown", event => {
+            switch(event.key) {
+                case "ArrowLeft":
+                    missionState.left = "heel";
+                    missionState.right = "toe";
+                    break;
+                case "ArrowRight":
+                    missionState.left = "toe";
+                    missionState.right = "heel";
+                    break;
+                case "ArrowUp":
+                    missionState.left = missionState.right = "toe";
+                    break;
+                case "ArrowDown":
+                missionState.left = missionState.right = "heel";
+                    break;
+                default:
+                    break;
+            }
+        });
+        window.addEventListener("keyup", event => {
+            switch(event.key) {
+                case "ArrowLeft":
+                case "ArrowRight":
+                case "ArrowUp":
+                case "ArrowDown":
+                    missionState.left = missionState.right = '';
+                    break;
+                default:
+                    break;
+            }
+        })
+        const missionDelta = {
+            step : 0.055,
+            angle : 0.05,
+        };
+        const stepVector = new THREE.Vector3();
+        const order = "YXZ";
+        const cameraEuler = new THREE.Euler();
+            cameraEuler.order = order;
+        const rotateSpeed = 1;
+        var previousTime = performance.now();
+        const boseScalar = {
+            x : 1,
+            y : 1,
+            z : 1,
+        };
+        var useMissions = false;
+        window.addEventListener("keypress", event => {
+            if(event.key == 'm')
+                useMissions = !useMissions;
+        });
+        window.addEventListener("load", event => {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, 1, 0.01, 100);
+            camera.position.set(0, 0, 0);
+            camera.rotation.order = order;
+
+            room = new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    10, // width
+                    7, // height
+                    10, // depth
+                ),
+                new THREE.MeshPhongMaterial({
+                    side : THREE.BackSide,
+                }),
+            );
+
+            scene.add(room);
+
+            cameraLight = new THREE.PointLight(
+                0xffffff,
+                0.9,
+                100,
+            );
+            cameraLight.position.copy(camera.position);
+            scene.add(cameraLight);
+
+            ceilingLight = new THREE.DirectionalLight(
+                0xffffff,
+                0.5,
+            );
+            ceilingLight.position.set(0, 1, 0);
+            scene.add(ceilingLight);
+
+            const meshSize = 0.2;
+            mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(meshSize, meshSize, meshSize),
+                new THREE.MeshPhongMaterial({
+                    color: 0xff0000,
+                }),
+            );
+            mesh.position.set(0, 0, -1);
+            scene.add(mesh);
+
+            renderer = new THREE.WebGLRenderer({
+                antialias : true,
+            });
+            htmlElement.appendChild(renderer.domElement);
+
+            function resize() {
+                const width = htmlElement.clientWidth;
+                const height = htmlElement.clientHeight;
+
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(width, height);
+                
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+            };
+            resize();
+            window.addEventListener("resize", resize);
+
+            renderer.setAnimationLoop(function() {
+                const currentTime = performance.now();
+                const deltaTime = (currentTime - previousTime) / 1000;
+                previousTime = currentTime;
+                
+                mesh.rotation.x += rotateSpeed * deltaTime;
+                mesh.rotation.y += rotateSpeed * deltaTime;
+
+                if(initializedAudio) {
+                    source.setPosition(mesh.position.x, mesh.position.y, mesh.position.z);
+                }
+                
+                if(missions.isConnected("left") && missions.isConnected("right")) {
+                    //console.log(`left: ${missionAverage.left.y.toFixed(3)}, right: ${missionAverage.right.y.toFixed(3)}`);
+
+                    ["left", "right"].forEach(side => {
+                        if(missionAverage[side].y < missionThreshold.min) {
+                            missionState[side] = "toe";
+                        }
+                        else if(missionAverage[side].y > missionThreshold.max) {
+                            missionState[side] = "heel";
+                        }
+                    });
+
+                    console.log(`left: ${missionState.left}, right: ${missionState.right}`);
+
+                    if(useMissions && missionState.left !== '' && missionState.right !== '') {
+                        if(missionState.left == missionState.right) {
+                            camera.getWorldDirection(stepVector);
+
+                            if(missionState.left == "heel") {
+                                // go back
+                                camera.position.addScaledVector(stepVector, -missionDelta.step);
+                                //console.log("back");
+                            }
+                            else {
+                                // go forward
+                                camera.position.addScaledVector(stepVector, missionDelta.step);
+                                //console.log("forward");
+                            }
+                        }
+                        else {
+                            if(missionState.left == "heel") {
+                                // rotate counterclockwise
+                                cameraEuler.y += missionDelta.angle;
+                                //console.log("counterclockwise");
+                            }
+                            else {
+                                // rotate clockwise
+                                cameraEuler.y -= missionDelta.angle;
+                                //console.log("clockwise");
+                            }
+                        }
+                    }
+                }
+
+                camera.rotation.x = (cameraEuler.x + (boseEuler.x * boseScalar.x));
+                camera.rotation.y = (cameraEuler.y + (boseEuler.y * boseScalar.y));
+                camera.rotation.z = (cameraEuler.z + (boseEuler.z * boseScalar.z));
+
+                audioScene.setListenerFromMatrix(camera.matrixWorld);
+                
+                renderer.render(scene, camera);
+            });
+        });
+    </script>
+
+    <script>
+        const boseEuler = new THREE.Euler();
+        const boseEulerOrigin = new THREE.Euler();
+            boseEuler.order = boseEulerOrigin.order = order;
+
+        var boseAREnabled = false;
+        var resetBoseAROrientation = false;
+
+        boseARDeviceElement.addEventListener("connect", event => {
+            console.log("connect")
+            boseARDeviceElement.addEventListener("doubleTap", event => {
+                resetBoseAROrientation = true;
+
+                if(!boseAREnabled) {
+                    boseARDeviceElement.boseARDevice.enableSensor("gameRotation", 20);
+                    enabled = true;
+                }
+            });
+
+            boseARDeviceElement.addEventListener("gameRotation", event => {
+                boseEuler.x = Number(boseARDeviceElement.getAttribute("gamerotationpitch")) + (Math.PI/2);
+                boseEuler.y = -Number(boseARDeviceElement.getAttribute("gamerotationyaw"));
+                boseEuler.z = Number(boseARDeviceElement.getAttribute("gamerotationroll"));
+                
+                if(resetBoseAROrientation) {
+                    boseEulerOrigin.copy(boseEuler);
+                    resetBoseAROrientation = false;
+                }
+
+                boseEuler.x -= boseEulerOrigin.x;
+                boseEuler.y -= boseEulerOrigin.y;
+                boseEuler.z -= boseEulerOrigin.z;
+            });
+        });
+    </script>
+
+    <script>
+        const handMaterials = {
+            bone : new THREE.MeshPhongMaterial({
+                color : 0xffffff,
+            }),
+            left :  new THREE.MeshPhongMaterial({
+                color : 0xffff00,
+            }),
+            right : new THREE.MeshPhongMaterial({
+                color : 0xff0000,
+            }),
+        };
+
+        const handGeometries = {
+            palm : new THREE.SphereGeometry(13, 12, 12),
+            joint : new THREE.SphereGeometry(8, 8, 8),
+        };
+
+        const addedHand = {
+            left : false,
+            right : false,
+        };
+
+        const addHand = (hand) => {
+            const skeleton = leapMotionElement.leapMotion.skeleton;
+
+            {
+                const sphere = new THREE.Mesh(handGeometries.palm, handMaterials[hand.type]);
+                const bone = skeleton.getBoneByName(`${hand.type} wrist`);
+                bone.add(sphere);
+                sphere.position.z = -hand.wrist.distanceTo(hand.palm.position);
+            }
+
+            hand.fingers.forEach(finger => {
+                finger.bones.forEach(bone => {
+                    const _bone = skeleton.getBoneByName(`${hand.type} ${finger.name} ${bone.name}`);
+
+                    if(![2, 3].includes(finger.type) || bone.type !== 0) {
+                        const sphere = new THREE.Mesh(new THREE.SphereGeometry(8, 8, 8), handMaterials[hand.type]);
+                        _bone.add(sphere);
+
+
+                        const cylinder = new THREE.Mesh(
+                            new THREE.CylinderGeometry(finger.width/3, finger.width/3, bone.length),
+                            handMaterials.bone,
+                        );
+                        _bone.add(cylinder);
+                        
+                        cylinder.rotateX(Math.PI/2);
+                        cylinder.position.z = -bone.length/2;
+                    }
+                });
+
+                {
+                    const sphere = new THREE.Mesh(new THREE.SphereGeometry(8, 8, 8), handMaterials[hand.type]);
+                    const bone = skeleton.getBoneByName(`${hand.type} ${finger.name} tip`);
+                    bone.add(sphere);
+                }
+
+                addedHand[hand.type] = true;
+            });
+        }
+
+        const group = new THREE.Group();
+        group.scale.x = group.scale.y = group.scale.z = 0.005;
+
+        group.position.z = -0.6;
+        group.position.y = -1.7;
+
+        var skeleton;
+
+        leapMotionElement.addEventListener("open", event => {
+            skeleton = leapMotionElement.leapMotion.skeleton;
+            group.add(leapMotionElement.leapMotion.skeleton.bones[0])
+            camera.add(group);
+            scene.add(camera);
+
+            const isVisible = {
+                left : false,
+                right : false,
+            }
+
+            const thumbTipPosition = {
+                left : new THREE.Vector3(),
+                right : new THREE.Vector3(),
+            };
+
+            const fingerTipPosition = {
+                left : new THREE.Vector3(),
+                right : new THREE.Vector3(),
+            };
+
+            const midpoint = new THREE.Vector3();
+
+            leapMotionElement.addEventListener("frame", event => {
+                const frame = event.detail;
+
+                isVisible.left = isVisible.right = false;
+
+                frame.hands.forEach(hand => {
+                    if(!addedHand[hand.type])
+                        addHand(hand);
+
+                    isVisible[hand.type] = true;
+
+                    skeleton.getBoneByName(`${hand.type} thumb tip`).getWorldPosition(thumbTipPosition[hand.type])
+                    
+                    if(hand.pinch.strength > 0.5 && mesh.position.distanceTo(thumbTipPosition[hand.type]) < 0.2) {
+                        skeleton.getBoneByName(`${hand.type} index tip`).getWorldPosition(fingerTipPosition[hand.type])
+                        midpoint.set(0, 0, 0);
+                        midpoint.add(fingerTipPosition[hand.type]);
+                        midpoint.add(thumbTipPosition[hand.type]);
+                        midpoint.multiplyScalar(0.5);
+                        mesh.position.copy(midpoint);
+                    }
+                });
+
+                ["left", "right"].forEach(side => {
+                    if(!isVisible[side]) {
+                        // hide hand
+                    }
+                });
+            });
+        });
+    </script>
+
+    <script>
+        var missions;
+        const missionAverage = {
+            left : {x:0, y:0},
+            right : {x:0, y:0},
+        };
+
+        window.addEventListener("load", event => {
+            missions = new Missions();
+
+            missions.addEventListener("sensorData", event => {
+                Object.assign(missionAverage[event.detail.side], event.detail.average);
+            });
+            
+            window.addEventListener("keypress", event => {
+                switch(event.key) {
+                    case 'l':
+                        if(!missions.isConnected("left")) {
+                            missions.connect("left")
+                                .then(() => {
+                                    missions.start("left");
+                                });
+                        }
+                        break;
+                    case 'r':
+                        if(!missions.isConnected("right")) {
+                            missions.connect("right")
+                                .then(() => {
+                                    missions.start("right");
+                                });
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            })
+        });
+    </script>
+
+</html>

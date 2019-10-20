@@ -1,17 +1,20 @@
 {
-  "name": "ESP32-nodejs",
+  "name": "Missions-Recording-App",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "node index.js"
+    "bundle": "npm run bundle-missions && npm run bundle-missions-viewer && npm run bundle-missions-player",
+    "bundle-missions": "parcel build script/missions/Missions.js -d script --out-file missions.js --no-source-maps --no-cache",
+    "bundle-missions-viewer": "parcel build script/missions/ViewerElement.js -d script --out-file missions-viewer.js --no-source-maps --no-cache",
+    "bundle-missions-player": "parcel build script/missions/PlayerElement.js -d script --out-file missions-player.js --no-source-maps --no-cache"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.17.1",
-    "serialport": "^7.1.5",
-    "socket.io": "^2.2.0"
+    "@types/web-bluetooth": "0.0.4",
+    "socket.io": "^2.3.0",
+    "three": "^0.108.0"
   }
 }

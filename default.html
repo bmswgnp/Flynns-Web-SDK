@@ -1,0 +1,76 @@
+<html>
+    <head>
+        <link rel="shortcut icon" href="./images/icon.png"/>
+        <title>Missions Recorder</title>
+        <meta name="viewport" content="width=device-width">
+    </head>
+
+    <style>
+        #container {
+            display: grid;
+            grid-template-rows: auto 50px;
+            width: 100%;
+            height: 100%;
+        }
+
+        #container > div[data-tab] {
+            display: none;
+            grid-row: 1;
+            grid-column: 1 / span 3;
+        }
+        #container > div[data-tab][data-selected] {
+            display: block;
+        }
+        #container > div[data-tab="recordings"][data-selected] {
+            overflow: scroll;
+        }
+
+
+        #container > button[data-tab]  {
+            grid-row: 2;
+        }
+    </style>
+
+    <body>
+        <div id="container">
+            <div data-tab="viewer" data-selected>
+                Connect and view data
+            </div>
+
+            <div data-tab="recorder">
+                Input form and start recording (also shows data)
+            </div>
+
+            <div data-tab="player">
+                Show list of recordings, which you can playback and export
+            </div>
+
+            <button data-tab="viewer">My Missions</button>
+            <button data-tab="recorder">Record</button>
+            <button data-tab="player">Recordings</button>
+        </div>
+
+        <script>
+            document.querySelectorAll(`button[data-tab]`).forEach(button => {
+                button.addEventListener("click", event => {
+                    document.querySelectorAll(`div[data-tab][data-selected]`).forEach(selectedDiv => delete selectedDiv.dataset.selected)
+                    
+                    const selectedDiv = document.querySelector(`div[data-tab="${button.dataset.tab}"]`);
+                    selectedDiv.dataset.selected = '';
+                });
+            });
+        </script>
+
+        <script>
+            // Connect
+        </script>
+
+        <script>
+            // Record
+        </script>
+
+        <script>
+            // Recordings
+        </script>
+    </body>
+</html>
