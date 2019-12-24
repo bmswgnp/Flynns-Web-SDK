@@ -7,8 +7,8 @@ class Missions {
         }
 
         this.addEventListener("characteristicvaluechanged", event => {
-            const sensorData = Array.from(new Uint8Array(this[event.detail.side].characteristic.value.buffer));
-
+            const dataView = this[event.detail.side].characteristic.value;
+            const sensorData = [0, 2, 4, 6, 8, 10].map(index => 100*dataView.getUint16(index, true)/Math.pow(2, 12));
             this.dispatchEvent({
                 type : "sensorData",
                 detail : {
@@ -19,27 +19,10 @@ class Missions {
             });
         });
 
-        /**
-         * Service universally unique identifier
-         * @type {string}
-         * @private
-        */
         this.serviceUUID = "7a658cba-0dcd-4d02-bb97-80296cf72dfd";
-
-        /** 
-         * Characteristic universally unique identifier
-         * @type {string}
-         * @private
-        */
         this.characteristicUUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
-        /** @typedef {{ arrayBuffer : ArrayBuffer, dataView : DataView }} Rate */
-        /** @typedef {{ rate : Rate, device : BluetoothDevice, server : BluetoothRemoteGATTServer, service : BluetoothRemoteGATTService, characteristic : BluetoothRemoteGATTCharacteristic }} Mission */
-
-        /**  @type {Mission} */
         this.left = {};
-
-        /**  @type {Mission} */
         this.right = {};
 
         ["left", "right"].forEach(side => {
@@ -50,14 +33,6 @@ class Missions {
         });
     }
 
-    /** @typedef {("left"|"right")} SideEnum */
-    /** @typedef {(0 | 20 | 40 | 80 | 160)} RateEnum */
-
-    /**
-     * Connect to one of the Insoles
-     * @param {SideEnum} side
-     * @returns {Promise<BluetoothDevice>} a BluetoothDevice instance
-     */
     connect(side) {
         if(!this.isConnected(side)) {
             if(window.navigator.bluetooth !== undefined) {
@@ -99,24 +74,6 @@ class Missions {
                     });
 
                     return characteristic.startNotifications();
-                    /*
-                    characteristic.startNotifications()
-                        .then(characteristic => {
-                            this.dispatchEvent({
-                                type : "connect",
-                                side,
-                            });
-
-                            characteristic.addEventListener("characteristicvaluechanged", event => {
-                                this.dispatchEvent({
-                                    type : event.type,
-                                    detail : {
-                                        side
-                                    }
-                                });
-                            });
-                        })
-                    */
                 });
             }
             else {
@@ -128,17 +85,10 @@ class Missions {
         }
     }
 
-    /**
-     * @param {SideEnum} side 
-     * @returns {Boolean}
-     */
     isConnected(side) {
         return (this[side].device !== undefined && this[side].device.gatt.connected && this[side].characteristic !== undefined);
     }
 
-    /**
-     * @param {SideEnum} side
-     */
     disconnect(side) {
         if(this.isConnected(side)) {
             this[side].characteristic.stopNotifications()
@@ -148,30 +98,16 @@ class Missions {
         }
     }
 
-    /**
-     * @param {SideEnum} side
-     * @returns {void | Promise}
-     */
     start(side) {
         if(this.isConnected(side))
             return this.setRate(side);
     }
 
-    /**
-     * @param {SideEnum} side
-     * @returns {Promise | void}
-     */
     stop(side) {
         if(this.isConnected(side))
             return this.setRate(side, 0);
     }
 
-    /**
-     * @param {SideEnum} side
-     * @param {RateEnum} rate the data rate, in milliseconds
-     * - if 0, then it stops streaming
-     * @returns {Promise | void}
-     */
     setRate(side, rate) {
         if(rate !== undefined)
             this[side].rate.dataView.setUint8(0, rate);
@@ -180,12 +116,6 @@ class Missions {
             return this[side].characteristic.writeValue(this[side].rate.dataView.buffer);
     }
 
-    /**
-     * average sensor position
-     * @param {number[]} sensorData 
-     * @returns {{x : number, y : number}}
-     * @private
-     */
     getAverage(sensorData) {
         const sum = sensorData.reduce((sum, value) => sum+value, 0);
         return sensorData.reduce((average, value, index) => {
